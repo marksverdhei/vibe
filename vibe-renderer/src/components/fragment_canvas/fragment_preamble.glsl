@@ -31,6 +31,18 @@ layout(set = 0, binding = 4) uniform sampler iSampler;
 // `vec3 texel = texture(sampler2D(iTexture, iSampler), vec2(.0, .5)).rgb;`
 layout(set = 0, binding = 5) uniform texture2D iTexture;
 
+// Contains the detected BPM (beats per minute) of the audio.
+// Typically in the range 60-200 for most music.
+layout(set = 0, binding = 6) uniform float iBPM;
+
+// User-configurable colors from colors.toml.
+layout(set = 0, binding = 7) uniform ColorsBlock {
+    vec4 color1;
+    vec4 color2;
+    vec4 color3;
+    vec4 color4;
+} iColors;
+
 // The color for the fragment/pixel.
 // Needs to be set in your shader (like in shadertoy).
 layout(location = 0) out vec4 fragColor;

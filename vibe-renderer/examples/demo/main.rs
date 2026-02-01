@@ -190,6 +190,7 @@ impl<'a> State<'a> {
                     format: surface_config.format,
 
                     img: None,
+                    colors: vibe_renderer::components::GpuColors::default(),
                     fragment_code: fragment_source,
                 })
                 .map(|canvas| Box::new(canvas) as Box<dyn Component>)

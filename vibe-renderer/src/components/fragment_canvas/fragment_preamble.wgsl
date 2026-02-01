@@ -34,3 +34,21 @@ var iSampler: sampler;
 // `let col = textureSample(iTexture, iSampler, uv).rgb;`
 @group(0) @binding(5)
 var iTexture: texture_2d<f32>;
+
+// Contains the detected BPM (beats per minute) of the audio.
+// Typically in the range 60-200 for most music.
+// Use this to sync animations to the music tempo.
+@group(0) @binding(6)
+var<uniform> iBPM: f32;
+
+// User-configurable colors from colors.toml.
+// Each color is a vec4f (RGBA, 0.0-1.0).
+struct Colors {
+    color1: vec4f,
+    color2: vec4f,
+    color3: vec4f,
+    color4: vec4f,
+}
+
+@group(0) @binding(7)
+var<uniform> iColors: Colors;

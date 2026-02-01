@@ -1,4 +1,5 @@
 mod cli;
+mod colors;
 mod config;
 mod output;
 mod state;
@@ -18,6 +19,7 @@ use xdg::BaseDirectories;
 const APP_NAME: &str = env!("CARGO_PKG_NAME");
 const OUTPUT_CONFIG_DIR_NAME: &str = "output_configs";
 const CONFIG_FILE_NAME: &str = "config.toml";
+const COLORS_FILE_NAME: &str = "colors.toml";
 
 static XDG: OnceLock<BaseDirectories> = OnceLock::new();
 
@@ -99,4 +101,9 @@ pub fn get_output_config_dir() -> PathBuf {
 /// Returns the path to the config file of `vibe`.
 pub fn get_config_path() -> PathBuf {
     get_xdg().place_config_file(CONFIG_FILE_NAME).unwrap()
+}
+
+/// Returns the path to the colors config file.
+pub fn get_colors_path() -> PathBuf {
+    get_xdg().place_config_file(COLORS_FILE_NAME).unwrap()
 }

@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use image::{DynamicImage, ImageReader};
 use vibe_audio::{fetcher::DummyFetcher, BarProcessorConfig, SampleProcessor};
-use vibe_renderer::components::{Component, FragmentCanvas, FragmentCanvasDescriptor, ShaderCode};
+use vibe_renderer::components::{Component, FragmentCanvas, FragmentCanvasDescriptor, GpuColors, ShaderCode};
 
 use crate::Tester;
 
@@ -27,6 +27,7 @@ fn wgsl_passes_without_img() {
         format: tester.output_texture_format(),
 
         img: None,
+        colors: GpuColors::default(),
         fragment_code: ShaderCode {
             language: vibe_renderer::components::ShaderLanguage::Wgsl,
             source: vibe_renderer::components::ShaderSource::Code(
@@ -58,6 +59,7 @@ fn wgsl_passes_with_img() {
         format: tester.output_texture_format(),
 
         img: Some(load_img()),
+        colors: GpuColors::default(),
         fragment_code: ShaderCode {
             language: vibe_renderer::components::ShaderLanguage::Wgsl,
             source: vibe_renderer::components::ShaderSource::Code(
@@ -89,6 +91,7 @@ fn glsl_passes_without_img() {
         format: tester.output_texture_format(),
 
         img: None,
+        colors: GpuColors::default(),
         fragment_code: ShaderCode {
             language: vibe_renderer::components::ShaderLanguage::Glsl,
             source: vibe_renderer::components::ShaderSource::Code(
@@ -120,6 +123,7 @@ fn glsl_passes_with_img() {
         format: tester.output_texture_format(),
 
         img: Some(load_img()),
+        colors: GpuColors::default(),
         fragment_code: ShaderCode {
             language: vibe_renderer::components::ShaderLanguage::Glsl,
             source: vibe_renderer::components::ShaderSource::Code(

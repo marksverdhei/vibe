@@ -56,6 +56,7 @@ impl ComponentConfig for FragmentCanvasConfig {
             }
         }
 
+        let colors = crate::colors::load().to_gpu();
         let fragment_canvas = FragmentCanvas::new(&FragmentCanvasDescriptor {
             sample_processor: processor,
             audio_conf: vibe_audio::BarProcessorConfig::from(&self.audio_conf),
@@ -63,6 +64,7 @@ impl ComponentConfig for FragmentCanvasConfig {
             format: texture_format,
             fragment_code: self.fragment_code.clone(),
             img,
+            colors,
         })?;
 
         Ok(Box::new(fragment_canvas))

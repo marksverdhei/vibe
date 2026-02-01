@@ -2,11 +2,35 @@ use super::{Component, ShaderCode, ShaderCodeError};
 use crate::{Renderable, Renderer};
 use pollster::FutureExt;
 use std::borrow::Cow;
+use std::io::Write;
 use vibe_audio::{
     fetcher::{Fetcher, SystemAudioFetcher},
-    BarProcessor, BarProcessorConfig, SampleProcessor,
+    BarProcessor, BarProcessorConfig, BpmDetector, BpmDetectorConfig, SampleProcessor,
 };
 use wgpu::include_wgsl;
+use wgpu::util::DeviceExt;
+
+/// GPU-side representation of user colors (4 × vec4f = 64 bytes).
+/// Layout matches the WGSL `Colors` struct (each field is vec4<f32>).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GpuColors {
+    pub color1: [f32; 4],
+    pub color2: [f32; 4],
+    pub color3: [f32; 4],
+    pub color4: [f32; 4],
+}
+
+impl Default for GpuColors {
+    fn default() -> Self {
+        Self {
+            color1: [0.0, 1.0, 0.5, 1.0],
+            color2: [1.0, 0.0, 1.0, 1.0],
+            color3: [0.0, 0.5, 1.0, 1.0],
+            color4: [1.0, 1.0, 0.0, 1.0],
+        }
+    }
+}
 
 const ENTRYPOINT: &str = "main";
 
@@ -19,6 +43,9 @@ pub struct FragmentCanvasDescriptor<'a, F: Fetcher> {
     // fragment shader relevant stuff
     pub fragment_code: ShaderCode,
     pub img: Option<image::DynamicImage>,
+
+    /// User-configurable colors exposed as `iColors` uniform in shaders.
+    pub colors: GpuColors,
 }
 
 struct TextureCtx {
@@ -29,12 +56,15 @@ struct TextureCtx {
 
 pub struct FragmentCanvas {
     bar_processor: BarProcessor,
+    bpm_detector: BpmDetector,
 
     iresolution: wgpu::Buffer,
     freqs: wgpu::Buffer,
     itime: wgpu::Buffer,
     imouse: wgpu::Buffer,
     _itexture: Option<TextureCtx>,
+    ibpm: wgpu::Buffer,
+    _icolors: wgpu::Buffer,
 
     bind_group0: wgpu::BindGroup,
 
@@ -46,6 +76,7 @@ impl FragmentCanvas {
         let device = desc.renderer.device();
         let queue = desc.renderer.queue();
         let bar_processor = BarProcessor::new(desc.sample_processor, desc.audio_conf.clone());
+        let bpm_detector = BpmDetector::new(desc.sample_processor, BpmDetectorConfig::default());
 
         let iresolution = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Fragment canvas: `iResolution` buffer"),
@@ -86,6 +117,19 @@ impl FragmentCanvas {
                 _texture: texture,
                 tv,
             }
+        });
+
+        let ibpm = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Fragment canvas: `iBPM` buffer"),
+            size: std::mem::size_of::<f32>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let icolors = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Fragment canvas: `iColors` buffer"),
+            contents: bytemuck::bytes_of(&desc.colors),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         let bind_group0_layout = {
@@ -152,6 +196,30 @@ impl FragmentCanvas {
                     },
                 ]);
             }
+
+            // iBPM uniform (binding 6)
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 6,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+
+            // iColors uniform (binding 7)
+            entries.push(wgpu::BindGroupLayoutEntry {
+                binding: 7,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
 
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Fragment canvas: Bind group 0 layout"),
@@ -259,6 +327,16 @@ impl FragmentCanvas {
                 ]);
             }
 
+            entries.push(wgpu::BindGroupEntry {
+                binding: 6,
+                resource: ibpm.as_entire_binding(),
+            });
+
+            entries.push(wgpu::BindGroupEntry {
+                binding: 7,
+                resource: icolors.as_entire_binding(),
+            });
+
             device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Fragment canvas: Bind group 0"),
                 layout: &bind_group0_layout,
@@ -268,12 +346,15 @@ impl FragmentCanvas {
 
         Ok(Self {
             bar_processor,
+            bpm_detector,
 
             iresolution,
             freqs,
             itime,
             imouse,
             _itexture: itexture,
+            ibpm,
+            _icolors: icolors,
 
             bind_group0,
 
@@ -307,8 +388,16 @@ impl Component for FragmentCanvas {
         processor: &SampleProcessor<SystemAudioFetcher>,
     ) {
         let bar_values = self.bar_processor.process_bars(processor);
-
         queue.write_buffer(&self.freqs, 0, bytemuck::cast_slice(&bar_values[0]));
+
+        // Update BPM
+        let bpm = self.bpm_detector.process(processor);
+        queue.write_buffer(&self.ibpm, 0, bytemuck::bytes_of(&bpm));
+
+        // Write BPM to file for external tools (waybar, etc.)
+        if let Ok(mut file) = std::fs::File::create("/tmp/vibe-bpm") {
+            let _ = writeln!(file, "{:.0}", bpm);
+        }
     }
 
     fn update_time(&mut self, queue: &wgpu::Queue, new_time: f32) {
