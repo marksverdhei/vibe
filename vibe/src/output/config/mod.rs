@@ -11,6 +11,12 @@ use crate::output::config::component::ComponentConfig;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputConfig {
     pub enable: bool,
+    /// Optional PipeWire node name to capture audio from.
+    /// When set, the `PIPEWIRE_NODE` env var is configured before opening
+    /// the audio stream so this window visualizes a specific source
+    /// (e.g., `"tts_sink"` for TTS audio).
+    #[serde(default)]
+    pub audio_target: Option<String>,
     pub components: Vec<component::Config>,
 }
 
@@ -20,6 +26,7 @@ impl OutputConfig {
 
         let new = Self {
             enable: true,
+            audio_target: None,
             components: vec![default_component],
         };
 
