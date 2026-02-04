@@ -128,8 +128,8 @@ impl OutputRenderer<'_> {
         let config = crate::config::load()?;
 
         let renderer = Renderer::new(&RendererDescriptor::from(&config.graphics_config));
-        let processor = config.sample_processor()?;
 
+        // Load output config first so we can set audio target before opening the stream
         let (output_config_path, output_config) = {
             let Some((path, config)) = crate::output::config::load(&output_name) else {
                 bail!(
@@ -146,12 +146,30 @@ impl OutputRenderer<'_> {
                         path,
                         OutputConfig {
                             enable: true,
+                            audio_target: None,
                             components: Vec::new(),
                         },
                     )
                 }
             }
         };
+
+        // Set PIPEWIRE_NODE before CPAL opens the stream so pipewire-alsa
+        // routes the capture to the right source. Must be set before
+        // sample_processor() which calls CPAL build_input_stream().
+        let prev_pw_node = std::env::var("PIPEWIRE_NODE").ok();
+        if let Some(ref target) = output_config.audio_target {
+            tracing::info!("Audio target: setting PIPEWIRE_NODE='{}'", target);
+            std::env::set_var("PIPEWIRE_NODE", target);
+        }
+
+        let processor = config.sample_processor()?;
+
+        // Restore previous PIPEWIRE_NODE so child processes aren't affected.
+        match prev_pw_node {
+            Some(prev) => std::env::set_var("PIPEWIRE_NODE", prev),
+            None => std::env::remove_var("PIPEWIRE_NODE"),
+        }
 
         let lookup_paths = output_config.external_paths();
 
