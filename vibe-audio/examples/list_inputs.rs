@@ -17,17 +17,19 @@ fn main() {
         buffer_size: cpal::BufferSize::Default,
     };
 
-    let stream = device.build_input_stream(
-        &config,
-        |data: &[f32], _: &cpal::InputCallbackInfo| {
-            let max = data.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
-            if max > 0.001 {
-                println!("Audio detected! max={:.4}", max);
-            }
-        },
-        |err| eprintln!("Error: {}", err),
-        None,
-    ).expect("build input stream");
+    let stream = device
+        .build_input_stream(
+            &config,
+            |data: &[f32], _: &cpal::InputCallbackInfo| {
+                let max = data.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+                if max > 0.001 {
+                    println!("Audio detected! max={:.4}", max);
+                }
+            },
+            |err| eprintln!("Error: {}", err),
+            None,
+        )
+        .expect("build input stream");
 
     use cpal::traits::StreamTrait;
     stream.play().unwrap();
