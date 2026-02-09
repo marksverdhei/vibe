@@ -9,10 +9,10 @@ use std::time::SystemTime;
 
 /// Default color palette (muted blue/purple theme)
 const DEFAULT_COLORS: [[f32; 3]; 4] = [
-    [0.08, 0.10, 0.18],  // dark blue-gray
-    [0.15, 0.20, 0.35],  // muted blue
-    [0.25, 0.35, 0.50],  // slate blue
-    [0.30, 0.25, 0.45],  // muted purple
+    [0.08, 0.10, 0.18], // dark blue-gray
+    [0.15, 0.20, 0.35], // muted blue
+    [0.25, 0.35, 0.50], // slate blue
+    [0.30, 0.25, 0.45], // muted purple
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
