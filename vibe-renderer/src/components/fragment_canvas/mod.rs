@@ -33,6 +33,7 @@ pub struct FragmentCanvas {
     bar_processor: BarProcessor,
     bpm_detector: BpmDetector,
 
+    // GPU uniform buffers (bindings 0-9, see fragment_preamble.wgsl)
     iresolution: wgpu::Buffer,
     freqs: wgpu::Buffer,
     itime: wgpu::Buffer,
@@ -43,6 +44,7 @@ pub struct FragmentCanvas {
     ilocaltime: wgpu::Buffer,
     _itexture: Option<TextureCtx>,
 
+    // Click state (normalized [0,1] coordinates, see Component::update_mouse_click)
     last_click_pos: (f32, f32),
     last_click_time: f32,
     resolution: [u32; 2],
@@ -51,10 +53,11 @@ pub struct FragmentCanvas {
 
     pipeline: wgpu::RenderPipeline,
 
-    // GPU readback for species identification
+    // GPU readback for pixel (0,0) — used by shaders that encode data there.
+    // See post_render() for the full pipeline documentation.
     readback_buffer: wgpu::Buffer,
-    readback_frames_remaining: u8,
-    surface_format: wgpu::TextureFormat,
+    readback_frames_remaining: u8, // countdown: try reading for N frames after click
+    surface_format: wgpu::TextureFormat, // needed to decode pixel byte order (BGRA vs RGBA)
 }
 
 impl FragmentCanvas {
@@ -462,6 +465,16 @@ impl Component for FragmentCanvas {
         );
     }
 
+    /// Handle a mouse click.
+    ///
+    /// Click-to-interact pipeline overview:
+    ///   1. Caller normalizes pixel coords to [0,1] and calls this method.
+    ///   2. We write the click to the GPU uniform `iMouseClick` (vec4f: x, y, time, 0).
+    ///   3. We write `/tmp/vibe-click` atomically with all click metadata.
+    ///   4. We start GPU readback: for the next few frames, `post_render` copies pixel (0,0)
+    ///      from the rendered texture. The shader encodes a clicked entity ID there.
+    ///   5. When readback finds a hit, we write `/tmp/vibe-click-species` with the species.
+    ///   6. The external Python daemon (pokemon-click-cry.py) watches both files.
     fn update_mouse_click(&mut self, queue: &wgpu::Queue, pos: (f32, f32), time: f32) {
         self.last_click_pos = pos;
         self.last_click_time = time;
@@ -471,26 +484,39 @@ impl Component for FragmentCanvas {
             bytemuck::cast_slice(&[pos.0, pos.1, time, 0.0]),
         );
 
-        // Write click data for external tools (e.g., pokemon cry daemon)
+        // Write click data atomically for external tools.
+        // File format: key=value pairs, one per line.
         if pos.0 >= 0.0 {
             if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
-                let _ = writeln!(
+                let _ = write!(
                     f,
-                    "{} {} {} {} {}",
+                    "x={}\ny={}\ntime={}\nwidth={}\nheight={}\n",
                     pos.0, pos.1, time, self.resolution[0], self.resolution[1]
                 );
             }
-            // Start GPU readback attempts to identify clicked species
+            // Start GPU readback: the shader may encode a hit species at pixel (0,0).
+            // We check for up to 6 frames to give the GPU time to render the click.
             self.readback_frames_remaining = 6;
         }
     }
 
+    /// GPU readback for shader-encoded click data.
+    ///
+    /// Some shaders (e.g., pokemon_grass.wgsl) encode hit-test results at pixel (0,0):
+    ///   - The shader writes `red = (entity_id + 1) / 255.0` at pixel (0,0) when a click
+    ///     hits an interactive entity (e.g., a Pokemon sprite).
+    ///   - Red channel = 0 means no hit; red > 0 means hit with `entity_id = red - 1`.
+    ///
+    /// This method copies pixel (0,0) to a staging buffer, maps it, and decodes the red
+    /// channel. On a hit, it writes the species to `/tmp/vibe-click-species` as a separate
+    /// file (no read-modify-write of the click file).
     fn post_render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
         if self.readback_frames_remaining == 0 {
             return;
         }
 
-        // Copy pixel (0,0) from rendered surface texture to staging buffer
+        // Copy pixel (0,0) from rendered surface texture to staging buffer.
+        // The staging buffer is 256 bytes (wgpu requires COPY_BYTES_PER_ROW_ALIGNMENT).
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
@@ -515,7 +541,7 @@ impl Component for FragmentCanvas {
         );
         queue.submit(std::iter::once(encoder.finish()));
 
-        // Map the buffer and read the pixel
+        // Map the buffer synchronously and read the pixel.
         let buffer_slice = self.readback_buffer.slice(..4);
         let (tx, rx) = std::sync::mpsc::channel();
         buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
@@ -532,20 +558,19 @@ impl Component for FragmentCanvas {
             drop(data);
             self.readback_buffer.unmap();
 
-            // Extract red channel based on surface format byte order
+            // Decode red channel. Surface format determines byte order:
+            //   BGRA: bytes = [B, G, R, A] → red is bytes[2]
+            //   RGBA: bytes = [R, G, B, A] → red is bytes[0]
             let red = match self.surface_format {
                 wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => bytes[2],
-                _ => bytes[0], // Rgba8Unorm and others
+                _ => bytes[0],
             };
 
             if red > 0 {
+                // Hit! Decode entity_id and write to species file.
                 let species = (red - 1) as i32;
-                // Append species as 6th field to /tmp/vibe-click
-                if let Ok(contents) = std::fs::read_to_string("/tmp/vibe-click") {
-                    let trimmed = contents.trim();
-                    if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
-                        let _ = writeln!(f, "{} {}", trimmed, species);
-                    }
+                if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click-species") {
+                    let _ = write!(f, "species={}\n", species);
                 }
                 self.readback_frames_remaining = 0;
             } else {

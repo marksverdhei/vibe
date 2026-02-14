@@ -100,6 +100,8 @@ impl OutputCtx {
         }
     }
 
+    /// Normalize pixel position to [0,1] and forward to all components.
+    /// See `Component::update_mouse_position` for the coordinate system contract.
     pub fn update_mouse_position(&mut self, queue: &wgpu::Queue, new_pos: (f64, f64)) {
         let normalized_pos = (
             new_pos.0 as f32 / self.surface_config.width as f32,
@@ -111,11 +113,19 @@ impl OutputCtx {
         }
     }
 
+    /// Normalize pixel position to [0,1] and forward click to all components.
+    /// `(-1, -1)` is passed through as-is to clear a click.
+    /// See `Component::update_mouse_click` for the coordinate system contract.
     pub fn update_mouse_click(&mut self, queue: &wgpu::Queue, pos: (f64, f64), time: f32) {
-        let normalized_pos = (
-            pos.0 as f32 / self.surface_config.width as f32,
-            pos.1 as f32 / self.surface_config.height as f32,
-        );
+        // Pass (-1,-1) through as-is (clear/right-click), otherwise normalize.
+        let normalized_pos = if pos.0 < 0.0 {
+            (pos.0 as f32, pos.1 as f32)
+        } else {
+            (
+                pos.0 as f32 / self.surface_config.width as f32,
+                pos.1 as f32 / self.surface_config.height as f32,
+            )
+        };
 
         for component in self.components.iter_mut() {
             component.update_mouse_click(queue, normalized_pos, time);

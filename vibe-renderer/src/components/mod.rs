@@ -39,15 +39,28 @@ pub trait Component: Renderable {
     /// Tells the component which resolution is now used.
     fn update_resolution(&mut self, renderer: &Renderer, new_resolution: [u32; 2]);
 
-    /// Tells the component the mouse position. `(x, y)`.
+    /// Tells the component the mouse position as normalized coordinates.
+    ///
+    /// Coordinate system (both `update_mouse_position` and `update_mouse_click`):
+    ///   - `(0, 0)` = top-left corner of the surface
+    ///   - `(1, 1)` = bottom-right corner of the surface
+    ///   - Callers (window.rs, output/mod.rs) normalize from pixel coords before calling.
     fn update_mouse_position(&mut self, queue: &wgpu::Queue, new_pos: (f32, f32));
 
     fn update_colors(&mut self, _queue: &wgpu::Queue, _colors: &[[f32; 3]; 4]) {}
 
+    /// Notify the component of a mouse click at a normalized position.
+    ///
+    /// `pos`: Normalized `(x, y)` in `[0, 1]` (see `update_mouse_position` for coord system).
+    ///        `(-1, -1)` means "clear / no click".
+    /// `time`: Elapsed seconds since the renderer started (same timebase as `update_time`).
     fn update_mouse_click(&mut self, _queue: &wgpu::Queue, _pos: (f32, f32), _time: f32) {}
 
     /// Called after the render pass completes with access to the rendered surface texture.
-    /// Used for GPU pixel readback (e.g., reading encoded species data from shader output).
+    ///
+    /// This hook enables GPU pixel readback: components can copy pixels from the rendered
+    /// frame back to the CPU. Used by FragmentCanvas to read shader-encoded data (e.g.,
+    /// the Pokemon shader encodes a clicked species ID at pixel (0,0) for CPU readback).
     fn post_render(
         &mut self,
         _device: &wgpu::Device,
