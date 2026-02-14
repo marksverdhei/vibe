@@ -17,10 +17,10 @@ pub struct BpmDetectorConfig {
 impl Default for BpmDetectorConfig {
     fn default() -> Self {
         Self {
-            history_seconds: 15.0,  // 15 seconds of audio history per estimate
+            history_seconds: 15.0, // 15 seconds of audio history per estimate
             min_bpm: 60.0,
             max_bpm: 200.0,
-            estimate_history_size: 60,  // 60 estimates * 15 seconds = 15 minutes
+            estimate_history_size: 60, // 60 estimates * 15 seconds = 15 minutes
         }
     }
 }
@@ -111,10 +111,7 @@ impl BpmDetector {
         }
 
         // 1. Calculate bass energy from FFT output
-        let bass_energy: f32 = fft_data[bin_start..bin_end]
-            .iter()
-            .map(|c| c.norm())
-            .sum();
+        let bass_energy: f32 = fft_data[bin_start..bin_end].iter().map(|c| c.norm()).sum();
 
         // 2. Spectral flux (positive energy changes indicate onsets)
         let flux = (bass_energy - self.prev_bass_energy).max(0.0);
