@@ -45,6 +45,16 @@ pub trait Component: Renderable {
     fn update_colors(&mut self, _queue: &wgpu::Queue, _colors: &[[f32; 3]; 4]) {}
 
     fn update_mouse_click(&mut self, _queue: &wgpu::Queue, _pos: (f32, f32), _time: f32) {}
+
+    /// Called after the render pass completes with access to the rendered surface texture.
+    /// Used for GPU pixel readback (e.g., reading encoded species data from shader output).
+    fn post_render(
+        &mut self,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _texture: &wgpu::Texture,
+    ) {
+    }
 }
 
 /// An extended version of `Component` which includes methods related to audio.

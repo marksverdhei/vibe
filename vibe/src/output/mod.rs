@@ -171,7 +171,7 @@ pub fn get_surface_config(
     }
 
     wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         format,
         width: size.width,
         height: size.height,

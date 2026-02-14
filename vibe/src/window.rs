@@ -89,13 +89,22 @@ impl State<'_> {
         }
     }
 
-    pub fn render(&self, renderer: &Renderer) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, renderer: &Renderer) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         renderer.render(&view, &self.components);
+
+        // GPU readback: let components read pixels from the rendered surface
+        for component in self.components.iter_mut() {
+            component.post_render(
+                renderer.device(),
+                renderer.queue(),
+                &surface_texture.texture,
+            );
+        }
 
         surface_texture.present();
         Ok(())
@@ -348,7 +357,11 @@ impl ApplicationHandler for OutputRenderer<'_> {
                     state.update_mouse_pos(self.renderer.queue(), position);
                 }
             }
-            WindowEvent::MouseInput { state: button_state, button, .. } => {
+            WindowEvent::MouseInput {
+                state: button_state,
+                button,
+                ..
+            } => {
                 if button == winit::event::MouseButton::Left
                     && button_state == winit::event::ElementState::Pressed
                 {
