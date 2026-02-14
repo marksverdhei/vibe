@@ -50,6 +50,11 @@ pub struct FragmentCanvas {
     bind_group0: wgpu::BindGroup,
 
     pipeline: wgpu::RenderPipeline,
+
+    // GPU readback for species identification
+    readback_buffer: wgpu::Buffer,
+    readback_frames_remaining: u8,
+    surface_format: wgpu::TextureFormat,
 }
 
 impl FragmentCanvas {
@@ -367,6 +372,13 @@ impl FragmentCanvas {
             })
         };
 
+        let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Fragment canvas: readback staging buffer"),
+            size: 256, // wgpu requires bytes_per_row to be multiple of COPY_BYTES_PER_ROW_ALIGNMENT (256)
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Ok(Self {
             bar_processor,
             bpm_detector,
@@ -388,6 +400,10 @@ impl FragmentCanvas {
             bind_group0,
 
             pipeline,
+
+            readback_buffer,
+            readback_frames_remaining: 0,
+            surface_format: desc.format,
         })
     }
 }
@@ -461,6 +477,76 @@ impl Component for FragmentCanvas {
                 let _ = writeln!(f, "{} {} {} {} {}", pos.0, pos.1, time,
                     self.resolution[0], self.resolution[1]);
             }
+            // Start GPU readback attempts to identify clicked species
+            self.readback_frames_remaining = 6;
+        }
+    }
+
+    fn post_render(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, texture: &wgpu::Texture) {
+        if self.readback_frames_remaining == 0 {
+            return;
+        }
+
+        // Copy pixel (0,0) from rendered surface texture to staging buffer
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &self.readback_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(256),
+                    rows_per_image: Some(1),
+                },
+            },
+            wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+        );
+        queue.submit(std::iter::once(encoder.finish()));
+
+        // Map the buffer and read the pixel
+        let buffer_slice = self.readback_buffer.slice(..4);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: None,
+        });
+
+        if rx.recv().ok().and_then(|r| r.ok()).is_some() {
+            let data = buffer_slice.get_mapped_range();
+            let bytes: [u8; 4] = [data[0], data[1], data[2], data[3]];
+            drop(data);
+            self.readback_buffer.unmap();
+
+            // Extract red channel based on surface format byte order
+            let red = match self.surface_format {
+                wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb => bytes[2],
+                _ => bytes[0], // Rgba8Unorm and others
+            };
+
+            if red > 0 {
+                let species = (red - 1) as i32;
+                // Append species as 6th field to /tmp/vibe-click
+                if let Ok(contents) = std::fs::read_to_string("/tmp/vibe-click") {
+                    let trimmed = contents.trim();
+                    if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
+                        let _ = writeln!(f, "{} {}", trimmed, species);
+                    }
+                }
+                self.readback_frames_remaining = 0;
+            } else {
+                self.readback_frames_remaining -= 1;
+            }
+        } else {
+            self.readback_buffer.unmap();
+            self.readback_frames_remaining -= 1;
         }
     }
 
