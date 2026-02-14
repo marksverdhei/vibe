@@ -352,10 +352,8 @@ impl ApplicationHandler for OutputRenderer<'_> {
                 if button == winit::event::MouseButton::Left
                     && button_state == winit::event::ElementState::Pressed
                 {
-                    if let Some(state) = self.state.as_mut() {
-                        let current_time = self.time.elapsed().as_secs_f32();
-                        state.update_mouse_click(self.renderer.queue(), current_time);
-                    }
+                    let current_time = self.time.elapsed().as_secs_f32();
+                    state.update_mouse_click(self.renderer.queue(), current_time);
                 }
             }
             _ => {}
