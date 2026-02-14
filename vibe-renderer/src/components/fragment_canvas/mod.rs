@@ -451,6 +451,13 @@ impl Component for FragmentCanvas {
             0,
             bytemuck::cast_slice(&[pos.0, pos.1, time, 0.0]),
         );
+
+        // Write click data for external tools (e.g., pokemon cry daemon)
+        if pos.0 >= 0.0 {
+            if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
+                let _ = writeln!(f, "{} {} {}", pos.0, pos.1, time);
+            }
+        }
     }
 
     fn update_colors(&mut self, queue: &wgpu::Queue, colors: &[[f32; 3]; 4]) {
