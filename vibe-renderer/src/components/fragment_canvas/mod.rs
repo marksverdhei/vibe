@@ -474,8 +474,11 @@ impl Component for FragmentCanvas {
         // Write click data for external tools (e.g., pokemon cry daemon)
         if pos.0 >= 0.0 {
             if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
-                let _ = writeln!(f, "{} {} {} {} {}", pos.0, pos.1, time,
-                    self.resolution[0], self.resolution[1]);
+                let _ = writeln!(
+                    f,
+                    "{} {} {} {} {}",
+                    pos.0, pos.1, time, self.resolution[0], self.resolution[1]
+                );
             }
             // Start GPU readback attempts to identify clicked species
             self.readback_frames_remaining = 6;
@@ -504,7 +507,11 @@ impl Component for FragmentCanvas {
                     rows_per_image: Some(1),
                 },
             },
-            wgpu::Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
         );
         queue.submit(std::iter::once(encoder.finish()));
 

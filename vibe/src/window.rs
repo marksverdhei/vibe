@@ -348,7 +348,11 @@ impl ApplicationHandler for OutputRenderer<'_> {
                     state.update_mouse_pos(self.renderer.queue(), position);
                 }
             }
-            WindowEvent::MouseInput { state: button_state, button, .. } => {
+            WindowEvent::MouseInput {
+                state: button_state,
+                button,
+                ..
+            } => {
                 if button == winit::event::MouseButton::Left
                     && button_state == winit::event::ElementState::Pressed
                 {

@@ -48,7 +48,13 @@ pub trait Component: Renderable {
 
     /// Called after the render pass completes with access to the rendered surface texture.
     /// Used for GPU pixel readback (e.g., reading encoded species data from shader output).
-    fn post_render(&mut self, _device: &wgpu::Device, _queue: &wgpu::Queue, _texture: &wgpu::Texture) {}
+    fn post_render(
+        &mut self,
+        _device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        _texture: &wgpu::Texture,
+    ) {
+    }
 }
 
 /// An extended version of `Component` which includes methods related to audio.
