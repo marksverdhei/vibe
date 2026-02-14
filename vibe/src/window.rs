@@ -89,13 +89,22 @@ impl State<'_> {
         }
     }
 
-    pub fn render(&self, renderer: &Renderer) -> Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, renderer: &Renderer) -> Result<(), wgpu::SurfaceError> {
         let surface_texture = self.surface.get_current_texture()?;
         let view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         renderer.render(&view, &self.components);
+
+        // GPU readback: let components read pixels from the rendered surface
+        for component in self.components.iter_mut() {
+            component.post_render(
+                renderer.device(),
+                renderer.queue(),
+                &surface_texture.texture,
+            );
+        }
 
         surface_texture.present();
         Ok(())
