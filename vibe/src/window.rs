@@ -27,6 +27,7 @@ struct State<'a> {
     surface: wgpu::Surface<'a>,
     surface_config: wgpu::SurfaceConfiguration,
     window: Arc<Window>,
+    last_cursor_pos: PhysicalPosition<f64>,
 
     components: Vec<Box<dyn ComponentAudio<SystemAudioFetcher>>>,
 }
@@ -46,6 +47,7 @@ impl State<'_> {
             surface,
             surface_config,
             window,
+            last_cursor_pos: PhysicalPosition::new(0.0, 0.0),
             components: Vec::new(),
         }
     }
@@ -100,11 +102,21 @@ impl State<'_> {
     }
 
     pub fn update_mouse_pos(&mut self, queue: &wgpu::Queue, new_pos: PhysicalPosition<f64>) {
+        self.last_cursor_pos = new_pos;
         let rel_x = new_pos.x as f32 / self.surface_config.width as f32;
         let rel_y = new_pos.y as f32 / self.surface_config.height as f32;
 
         for component in self.components.iter_mut() {
             component.update_mouse_position(queue, (rel_x, rel_y));
+        }
+    }
+
+    pub fn update_mouse_click(&mut self, queue: &wgpu::Queue, time: f32) {
+        let rel_x = self.last_cursor_pos.x as f32 / self.surface_config.width as f32;
+        let rel_y = self.last_cursor_pos.y as f32 / self.surface_config.height as f32;
+
+        for component in self.components.iter_mut() {
+            component.update_mouse_click(queue, (rel_x, rel_y), time);
         }
     }
 }
@@ -334,6 +346,16 @@ impl ApplicationHandler for OutputRenderer<'_> {
             WindowEvent::CursorMoved { position, .. } => {
                 if let Some(state) = self.state.as_mut() {
                     state.update_mouse_pos(self.renderer.queue(), position);
+                }
+            }
+            WindowEvent::MouseInput { state: button_state, button, .. } => {
+                if button == winit::event::MouseButton::Left
+                    && button_state == winit::event::ElementState::Pressed
+                {
+                    if let Some(state) = self.state.as_mut() {
+                        let current_time = self.time.elapsed().as_secs_f32();
+                        state.update_mouse_click(self.renderer.queue(), current_time);
+                    }
                 }
             }
             _ => {}
