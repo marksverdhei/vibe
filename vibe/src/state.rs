@@ -174,6 +174,16 @@ impl State {
                         .create_view(&wgpu::TextureViewDescriptor::default()),
                     &output.components,
                 );
+
+                // GPU readback: let components read pixels from the rendered surface
+                for component in output.components.iter_mut() {
+                    component.post_render(
+                        self.renderer.device(),
+                        self.renderer.queue(),
+                        &surface_texture.texture,
+                    );
+                }
+
                 surface_texture.present();
                 output.request_redraw(qh);
             }

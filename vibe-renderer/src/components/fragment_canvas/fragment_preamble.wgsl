@@ -60,3 +60,7 @@ var iTexture: texture_2d<f32>;
 //   - w: reserved (0.0)
 @group(0) @binding(8)
 var<uniform> iMouseClick: vec4f;
+
+// Contains the local wall-clock time as hours since midnight (0.0-24.0).
+@group(0) @binding(9)
+var<uniform> iLocalTime: f32;

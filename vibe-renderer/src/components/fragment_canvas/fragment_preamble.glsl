@@ -52,6 +52,9 @@ layout(set = 0, binding = 7) uniform texture2D iTexture;
 //   - w: reserved (0.0)
 layout(set = 0, binding = 8) uniform vec4 iMouseClick;
 
+// Contains the local wall-clock time as hours since midnight (0.0-24.0).
+layout(set = 0, binding = 9) uniform float iLocalTime;
+
 // The color for the fragment/pixel.
 // Needs to be set in your shader (like in shadertoy).
 layout(location = 0) out vec4 fragColor;
