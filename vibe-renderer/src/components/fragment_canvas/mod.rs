@@ -1,5 +1,6 @@
 use super::{Component, ShaderCode, ShaderCodeError};
 use crate::{components::ComponentAudio, Renderable, Renderer};
+use chrono::Timelike;
 use pollster::FutureExt;
 use std::borrow::Cow;
 use std::io::Write;
@@ -39,6 +40,7 @@ pub struct FragmentCanvas {
     ibpm: wgpu::Buffer,
     icolors: wgpu::Buffer,
     imouseclick: wgpu::Buffer,
+    ilocaltime: wgpu::Buffer,
     _itexture: Option<TextureCtx>,
 
     last_click_pos: (f32, f32),
@@ -103,6 +105,13 @@ impl FragmentCanvas {
         let imouseclick = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Fragment canvas: `iMouseClick` buffer"),
             size: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let ilocaltime = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Fragment canvas: `iLocalTime` buffer"),
+            size: std::mem::size_of::<f32>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -186,6 +195,17 @@ impl FragmentCanvas {
                 // iMouseClick
                 wgpu::BindGroupLayoutEntry {
                     binding: 8,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // iLocalTime
+                wgpu::BindGroupLayoutEntry {
+                    binding: 9,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
@@ -320,6 +340,10 @@ impl FragmentCanvas {
                     binding: 8,
                     resource: imouseclick.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: ilocaltime.as_entire_binding(),
+                },
             ];
 
             if let Some(texture) = &itexture {
@@ -353,6 +377,7 @@ impl FragmentCanvas {
             ibpm,
             icolors,
             imouseclick,
+            ilocaltime,
             _itexture: itexture,
 
             last_click_pos: (-1.0, -1.0),
@@ -402,6 +427,12 @@ impl Component for FragmentCanvas {
 
     fn update_time(&mut self, queue: &wgpu::Queue, new_time: f32) {
         queue.write_buffer(&self.itime, 0, bytemuck::bytes_of(&new_time));
+
+        // Write current wall-clock time as hours since midnight
+        let now = chrono::Local::now();
+        let local_time =
+            now.hour() as f32 + now.minute() as f32 / 60.0 + now.second() as f32 / 3600.0;
+        queue.write_buffer(&self.ilocaltime, 0, bytemuck::bytes_of(&local_time));
     }
 
     fn update_mouse_position(&mut self, queue: &wgpu::Queue, new_pos: (f32, f32)) {
