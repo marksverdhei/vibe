@@ -45,6 +45,7 @@ pub struct FragmentCanvas {
 
     last_click_pos: (f32, f32),
     last_click_time: f32,
+    resolution: [u32; 2],
 
     bind_group0: wgpu::BindGroup,
 
@@ -382,6 +383,7 @@ impl FragmentCanvas {
 
             last_click_pos: (-1.0, -1.0),
             last_click_time: 0.0,
+            resolution: [0, 0],
 
             bind_group0,
 
@@ -416,6 +418,7 @@ impl<F: Fetcher> ComponentAudio<F> for FragmentCanvas {
 
 impl Component for FragmentCanvas {
     fn update_resolution(&mut self, renderer: &crate::Renderer, new_resolution: [u32; 2]) {
+        self.resolution = new_resolution;
         let queue = renderer.queue();
 
         queue.write_buffer(
@@ -455,7 +458,8 @@ impl Component for FragmentCanvas {
         // Write click data for external tools (e.g., pokemon cry daemon)
         if pos.0 >= 0.0 {
             if let Ok(mut f) = std::fs::File::create("/tmp/vibe-click") {
-                let _ = writeln!(f, "{} {} {}", pos.0, pos.1, time);
+                let _ = writeln!(f, "{} {} {} {} {}", pos.0, pos.1, time,
+                    self.resolution[0], self.resolution[1]);
             }
         }
     }
